@@ -7,6 +7,7 @@ from pathlib import Path
 
 genai.configure(api_key="AIzaSyD4eAP1_to0pxgNVZ4BlJj8V1xE_mD8U7E")
 MODEL = "gemini-2.0-flash"
+IMAGE_MODEL = "gemini-2.0-flash-image"
 BASE_DIR = Path(__file__).resolve().parent
 
 #5 Functions
@@ -48,15 +49,30 @@ def meal_from_fridge(photo_path):
 
 def make_poster(text):
     """Generate an image poster with a motivational quote."""
-    # Note: Image generation may not be available in all regions
-    # For now, return a text-based motivational message
-    return f"Motivational Quote: '{text}' - Stay motivated!"
+    model = genai.GenerativeModel(IMAGE_MODEL)
+    prompt = (
+        "Minimalist motivational poster, dark background, bold typography, "
+        f"focus on the quote '{text}'"
+    )
+
+    try:
+        response = model.generate_image(prompt=prompt, size="1024x1024")
+    except Exception as err:
+        return f"Image generation failed."
+
+    if not getattr(response, "images", None):
+        return "Image generation returned no images."
+
+    image_bytes = response.images[0].image_bytes
+    output_path = BASE_DIR / "poster_output.png"
+    with open(output_path, "wb") as file:
+        file.write(image_bytes)
+
+    return str(output_path.name)
 
 def daily_health(steps, calories, water):
     """Basic health recap."""
     msg = f"Steps: {steps} | Calories burned: {calories} | Water: {water}ml"
-    if water < 2000:
-        msg += " (Drink more water!)"
     return msg
 
 # ---------------- Main Program ---------------- #
@@ -65,10 +81,12 @@ def main():
     print("=== Orion Personal Assistant ===\n")
 
     # 1. Daily summary
-    schedule = ["Morning jog", "Work project", "Call with Sam", "Grocery run"]
+    schedule = ["Morning jog", "Work project", "Call with John", "Do Homework"]
     print(summarize_day(schedule), "\n")
+    # spacer for readability
+    print()
 
-    # 2. Wardrobe check (image reasoning)
+    # 2. Wardrobe check 
     try:
         outfit = outfit_suggestion("wardrobe.jpg")
         print("Outfit suggestion:", outfit, "\n")
@@ -76,6 +94,9 @@ def main():
         print("Wardrobe image not found. Please add 'wardrobe.jpg' to test this feature.\n")
     except Exception as err:
         print(f"Error analyzing wardrobe: {err}\n")
+
+    # spacer for readability
+    print()
 
     # 3. Fridge meal (image reasoning)
     try:
@@ -86,9 +107,15 @@ def main():
     except Exception as err:
         print(f"Error analyzing fridge: {err}\n")
 
+    # spacer for readability
+    print()
+
     # 4. Motivational poster (image generation)
     poster_path = make_poster("Small progress is still progress.")
     print("Motivational poster saved as:", poster_path, "\n")
+
+    # spacer for readability
+    print()
 
     # 5. Fitness summary
     print(daily_health(6500, 400, 1800))
