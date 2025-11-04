@@ -97,7 +97,7 @@ def workout_split():
 
 
 def daily_summary_action():
-    schedule = ["Morning jog", "Work project", "Call with John", "Do homework"]
+    schedule = ["Workout", "Shower", "Play with dog", "Study"]
     print(summarize_day(schedule))
 
 
