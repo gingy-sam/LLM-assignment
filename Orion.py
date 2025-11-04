@@ -1,16 +1,17 @@
 # Orion.py
 # Simple personal assistant using Google Gemini API
 
-import google.generativeai as genai
+import random
+import re
 from datetime import date
 from pathlib import Path
 
+import google.generativeai as genai
+
 genai.configure(api_key="AIzaSyD4eAP1_to0pxgNVZ4BlJj8V1xE_mD8U7E")
 MODEL = "gemini-2.0-flash"
-IMAGE_MODEL = "gemini-2.0-flash-image"
 BASE_DIR = Path(__file__).resolve().parent
 
-#5 Functions
 
 def summarize_day(tasks):
     """Quick summary of tasks for the day."""
@@ -19,106 +20,138 @@ def summarize_day(tasks):
     joined = "; ".join(tasks)
     return f"{date.today().strftime('%B %d')}: {joined}."
 
-def outfit_suggestion(photo_path):
-    """Use Gemini to suggest an outfit from wardrobe image."""
+
+def _resolve_photo_path(photo_path):
     photo_path = Path(photo_path)
     if not photo_path.is_absolute():
         photo_path = BASE_DIR / photo_path
-    with open(photo_path, "rb") as img:
-        data = img.read()
-    model = genai.GenerativeModel(MODEL)
-    result = model.generate_content([
-        "This is a photo of clothes. Suggest a simple outfit for casual wear.",
-        {"mime_type": "image/jpeg", "data": data},
-    ])
-    return result.text.strip()
+    return photo_path
+
+
+def _clean_meal_names(raw_text):
+    cleaned = []
+    for line in raw_text.splitlines():
+        stripped = re.sub(r"^[\s\-\*\d\.)]+", "", line).strip()
+        if stripped:
+            cleaned.append(stripped)
+    return "\n".join(cleaned) if cleaned else raw_text
+
 
 def meal_from_fridge(photo_path):
-    """Suggest a meal idea based on fridge contents image."""
-    photo_path = Path(photo_path)
-    if not photo_path.is_absolute():
-        photo_path = BASE_DIR / photo_path
+    """Suggest meal ideas strictly by name based on a fridge image."""
+    photo_path = _resolve_photo_path(photo_path)
     with open(photo_path, "rb") as img:
         data = img.read()
     model = genai.GenerativeModel(MODEL)
-    res = model.generate_content([
-        "Look at this fridge photo and suggest something healthy I could make.",
+    prompt = (
+        "Look at this fridge photo and infer three possible healthy meal ideas I could make. "
+        "Respond with only the meal names separated by new lines. Do not include ingredients or descriptions."
+    )
+    response = model.generate_content([
+        prompt,
         {"mime_type": "image/jpeg", "data": data},
     ])
-    return res.text.strip()
+    return _clean_meal_names(response.text.strip())
 
-def make_poster(text):
-    """Generate an image poster with a motivational quote."""
-    model = genai.GenerativeModel(IMAGE_MODEL)
+
+def comfort_puppy():
+    """Provide a comforting puppy description when image generation is unavailable."""
     prompt = (
-        "Minimalist motivational poster, dark background, bold typography, "
-        f"focus on the quote '{text}'"
+        "Offer a short, uplifting description of an adorable puppy to cheer someone up. "
+        "Keep it to two sentences."
     )
-
     try:
-        response = model.generate_image(prompt=prompt, size="1024x1024")
+        model = genai.GenerativeModel(MODEL)
+        response = model.generate_content(prompt)
+        return response.text.strip()
     except Exception as err:
-        return f"Image generation failed."
+        return f"Could not fetch a puppy boost right now: {err}"
 
-    if not getattr(response, "images", None):
-        return "Image generation returned no images."
 
-    image_bytes = response.images[0].image_bytes
-    output_path = BASE_DIR / "poster_output.png"
-    with open(output_path, "wb") as file:
-        file.write(image_bytes)
+def pick_video_game():
+    """Pick a random video game for the evening."""
+    suggestions = [
+        "Stardew Valley",
+        "Hades",
+        "Mario Kart 8 Deluxe",
+        "Animal Crossing: New Horizons",
+        "The Legend of Zelda: Tears of the Kingdom",
+        "Overcooked! 2",
+        "Rocket League",
+        "Minecraft",
+        "Fortnite",
+        "Hollow Knight",
+    ]
+    return random.choice(suggestions)
 
-    return str(output_path.name)
 
-def daily_health(steps, calories, water):
-    """Basic health recap."""
-    msg = f"Steps: {steps} | Calories burned: {calories} | Water: {water}ml"
-    return msg
+def workout_split():
+    """Return a simple four-day workout split."""
+    split_plan = [
+        "Day 1 - Push: Chest, shoulders, triceps",
+        "Day 2 - Pull: Back, biceps, rear delts",
+        "Day 3 - Legs: Quads, hamstrings, calves",
+        "Day 4 - Active Recovery: Core work and light cardio",
+    ]
+    return "\n".join(split_plan)
 
-# ---------------- Main Program ---------------- #
+
+def daily_summary_action():
+    schedule = ["Morning jog", "Work project", "Call with John", "Do homework"]
+    print(summarize_day(schedule))
+
+
+def meal_ideas_action():
+    try:
+        print(meal_from_fridge("fridge.jpg"))
+    except FileNotFoundError:
+        print("Fridge image not found. Add 'fridge.jpg' next to Orion.py to use this option.")
+    except Exception as err:
+        print(f"Error analyzing fridge: {err}")
+
+
+def puppy_action():
+    print(comfort_puppy())
+
+
+def video_game_action():
+    print(f"Play this tonight: {pick_video_game()}")
+
+
+def workout_action():
+    print(workout_split())
+
 
 def main():
-    print("=== Orion Personal Assistant ===\n")
+    actions = {
+        "1": ("Daily schedule summary", daily_summary_action),
+        "2": ("Meal ideas from fridge.jpg", meal_ideas_action),
+        "3": ("Cheer up with a cute puppy", puppy_action),
+        "4": ("Pick a video game for tonight", video_game_action),
+        "5": ("Get a workout split", workout_action),
+    }
 
-    # 1. Daily summary
-    schedule = ["Morning jog", "Work project", "Call with John", "Do Homework"]
-    print(summarize_day(schedule), "\n")
-    # spacer for readability
-    print()
+    while True:
+        print("\n=== Orion Personal Assistant ===")
+        for key, (label, _) in actions.items():
+            print(f"{key}. {label}")
+        print("0. Exit")
 
-    # 2. Wardrobe check 
-    try:
-        outfit = outfit_suggestion("wardrobe.jpg")
-        print("Outfit suggestion:", outfit, "\n")
-    except FileNotFoundError:
-        print("Wardrobe image not found. Please add 'wardrobe.jpg' to test this feature.\n")
-    except Exception as err:
-        print(f"Error analyzing wardrobe: {err}\n")
+        choice = input("Choose an option: ").strip()
+        if choice == "0":
+            print("See you next time!")
+            break
 
-    # spacer for readability
-    print()
+        action = actions.get(choice)
+        if not action:
+            print("Invalid selection. Try again.")
+            continue
 
-    # 3. Fridge meal (image reasoning)
-    try:
-        meal = meal_from_fridge("fridge.jpg")
-        print("Meal idea:", meal, "\n")
-    except FileNotFoundError:
-        print("Fridge image not found. Please add 'fridge.jpg' to test this feature.\n")
-    except Exception as err:
-        print(f"Error analyzing fridge: {err}\n")
+        label, handler = action
+        print(f"\n--- {label} ---")
+        handler()
+        print()
 
-    # spacer for readability
-    print()
-
-    # 4. Motivational poster (image generation)
-    poster_path = make_poster("Small progress is still progress.")
-    print("Motivational poster saved as:", poster_path, "\n")
-
-    # spacer for readability
-    print()
-
-    # 5. Fitness summary
-    print(daily_health(6500, 400, 1800))
 
 if __name__ == "__main__":
     main()
